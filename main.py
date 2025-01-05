@@ -3,6 +3,7 @@ import json
 import logging
 import math
 import os
+import time
 from multiprocessing import Queue
 import torch
 from torch import nn
@@ -162,7 +163,7 @@ class DatasetQueue(object):
         self.path = path
         self.max_len = max_len
         self.max_queue_size=max_queue_size
-    def put(self,queue):
+    def put(self,queue,stop_event):
         paths = os.listdir(self.path)
         paths = [os.path.join(self.path, path) for path in paths]
         datas = []
@@ -187,6 +188,8 @@ class DatasetQueue(object):
                     if end:
                         break
         queue.put(None)
+        while not stop_event.is_set():
+            time.sleep(1)
 class DataLoaders(object):
     def __init__(self, batch_size, dataset_queue,shuffle=True,drop_last=True):
         self.batch_size=batch_size
@@ -276,7 +279,8 @@ def train(path,nlayer,nhead,total_steps,vocal_size,d_model,max_len,batch_size,ta
     for epoch_ in range(start_epoch,epoch):
             logger.info("开始第{}轮训练".format(epoch_))
             dataset_queue=DatasetQueue(path=path,max_len=max_len,max_queue_size=max_queue_size)
-            multiprocessing.Process(target=dataset_queue.put,args=(dataset_queue.queue,)).start()
+            stop_event = multiprocessing.Event()
+            multiprocessing.Process(target=dataset_queue.put,args=(dataset_queue.queue,stop_event)).start()
             dataloaders=DataLoaders(batch_size=batch_size,dataset_queue=dataset_queue.queue)
             logger.info("成功创建数据集生成器")
             get_dataloader=dataloaders.get_dataloader()
@@ -313,6 +317,7 @@ def train(path,nlayer,nhead,total_steps,vocal_size,d_model,max_len,batch_size,ta
                 save_checkpoint(model,optimizer,scheduler,epoch_,data_num)
                 logger.info("完成checkpoint保存")
             data_num=0
+            stop_event.set()
     logger.info("完成训练")
 def predict(nlayer,nhead,vocal_size,d_model,max_len,batch_size,dim_feedforward,pad_id,device):
     model=WYY(vocab_size=vocal_size,nlayer=nlayer,nhead=nhead,d_model=d_model,max_len=max_len,batch_size=batch_size,dim_feedforward=dim_feedforward,pad_id=pad_id,device=device)
