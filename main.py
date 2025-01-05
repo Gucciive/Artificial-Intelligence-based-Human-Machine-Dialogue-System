@@ -67,10 +67,11 @@ class WYY (nn.Module):
 class Dict(object):
     def __init__(self):
         self.vocab_path='vocab.json'
-
-        with open(self.vocab_path, 'r', encoding='utf-8') as f:
-            self.vocab = json.load(f)
-
+        if os.path.exists(self.vocab_path):
+            with open(self.vocab_path, 'r', encoding='utf-8') as f:
+                self.vocab = json.load(f)
+        else:
+            self.vocab = {}
     def vocab_to_id(self,data,max_length):
         datas=[]
         temp=[self.vocab['<Q>']]
@@ -175,7 +176,7 @@ class DatasetQueue(object):
                         if not data:
                             end = True
                             break
-                        elif len(data)==999:
+                        elif len(datas)==999:
                             datas.append(data)
                             break
                         datas.append(data)
@@ -186,9 +187,6 @@ class DatasetQueue(object):
                     if end:
                         break
         queue.put(None)
-
-
-
 class DataLoaders(object):
     def __init__(self, batch_size, dataset_queue,shuffle=True,drop_last=True):
         self.batch_size=batch_size
@@ -204,8 +202,6 @@ class DataLoaders(object):
             dataloader = torch.utils.data.DataLoader(dataset, batch_size=self.batch_size, shuffle=self.shuffle,
                                               drop_last=self.drop_last,num_workers=0,pin_memory=True)
             yield dataloader
-
-
 def save_checkpoint(model,optimizer,scheduler,epoch,data_num):
     state = {
         'epoch': epoch,
@@ -244,7 +240,6 @@ def make_vocab_weight(path):
     vocab_weight=[1/math.log(v+1) for v in vocab_num.values()]
     vocab_weight=torch.tensor(vocab_weight)
     torch.save(vocab_weight,"vocab_weight.pt")
-
 def train(path,nlayer,nhead,total_steps,vocal_size,d_model,max_len,batch_size,target_batch_size,epoch,dim_feedforward,pad_id,max_queue_size,device, weight_decay=0, clip_norm=1.0,label_smoothing=0.3):
     logger=Logger()
     model=WYY(vocab_size=vocal_size,nlayer=nlayer,nhead=nhead,d_model=d_model,max_len=max_len,batch_size=batch_size,dim_feedforward=dim_feedforward,pad_id=pad_id,device=device)
@@ -370,10 +365,6 @@ def predict(nlayer,nhead,vocal_size,d_model,max_len,batch_size,dim_feedforward,p
     word=data[torch.topk(p.reshape(-1,),1)[1]].squeeze(0)
     for i in range(max_len-1):
         print(id_to_vocab[word[i].item()],end="")
-
-
-
-
 if __name__ == '__main__':
     predict(vocal_size=4215,d_model=512,max_len=512,batch_size=5,dim_feedforward=1024,pad_id=0,nlayer=12,nhead=8,device=torch.device('cuda:0' if torch.cuda.is_available() else 'cpu'))
     # train(path="D:\code\datas\\1623_0000001\zh",total_steps=125492,vocal_size=4215,d_model=512,max_len=512,batch_size=12,target_batch_size=60,epoch=2,dim_feedforward=1024,pad_id=0,max_queue_size=200,nlayer=12,nhead=8,device=torch.device('cuda:0' if torch.cuda.is_available() else 'cpu'))
